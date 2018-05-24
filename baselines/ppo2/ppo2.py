@@ -8,6 +8,8 @@ from baselines import logger
 from collections import deque
 from baselines.common import explained_variance
 from baselines.common.runners import AbstractEnvRunner
+from gym.spaces.box import Box
+from gym.spaces.discrete import Discrete
 
 class Model(object):
     def __init__(self, *, policy, ob_space, ac_space, nbatch_act, nbatch_train,
@@ -158,8 +160,8 @@ def learn(*, policy, env, nsteps, total_timesteps, ent_coef, lr,
     total_timesteps = int(total_timesteps)
 
     nenvs = 1
-    ob_space = env.observation_space
-    ac_space = env.action_space
+    ob_space = Box(low=0, high=1, shape=(84, 84, 4))
+    ac_space = Discrete(8)
     nbatch = nenvs * nsteps
     nbatch_train = nbatch // nminibatches
 
