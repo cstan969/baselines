@@ -157,7 +157,7 @@ def learn(*, policy, env, nsteps, total_timesteps, ent_coef, lr,
     else: assert callable(cliprange)
     total_timesteps = int(total_timesteps)
 
-    nenvs = env.num_envs
+    nenvs = 1
     ob_space = env.observation_space
     ac_space = env.action_space
     nbatch = nenvs * nsteps
