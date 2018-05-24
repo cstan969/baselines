@@ -7,7 +7,6 @@ import tensorflow as tf
 from baselines import logger
 from collections import deque
 from baselines.common import explained_variance
-from baselines.common.runners import AbstractEnvRunner
 from gym.spaces.box import Box
 from gym.spaces.discrete import Discrete
 
@@ -71,6 +70,7 @@ class Model(object):
 
         def load(load_path):
             loaded_params = joblib.load(load_path)
+            #print(loaded_params)
             restores = []
             for p, loaded_p in zip(params, loaded_params):
                 restores.append(p.assign(loaded_p))
@@ -87,12 +87,19 @@ class Model(object):
         self.load = load
         tf.global_variables_initializer().run(session=sess) #pylint: disable=E1101
 
-class Runner(AbstractEnvRunner):
+class Runner(object):
 
     def __init__(self, *, env, model, nsteps, gamma, lam):
-        super().__init__(env=env, model=model, nsteps=nsteps)
-        self.lam = lam
+        self.env = env
+        self.model = model
+        nenv = 1
+        self.obs = np.zeros((nenv,) + env.observation_space.shape, dtype=model.train_model.X.dtype.name)
+        self.obs[:] = env.reset()
         self.gamma = gamma
+        self.lam = lam
+        self.nsteps = nsteps
+        self.states = model.initial_state
+        self.dones = [False for _ in range(nenv)]
 
     def run(self):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [],[],[],[],[],[]
@@ -106,10 +113,14 @@ class Runner(AbstractEnvRunner):
             mb_neglogpacs.append(neglogpacs)
             mb_dones.append(self.dones)
             self.obs[:], rewards, self.dones, infos = self.env.step(actions)
+            #self.env.render()
             #for info in infos:
             #    maybeepinfo = info.get('episode')
-            #    if maybeepinfo: epinfos.append(maybeepinfo)
+            #    if maybeepinfo:
+            #        epinfos.append(maybeepinfo)
+            #        print('maybeepinfo= ', maybeepinfo)
             mb_rewards.append(rewards)
+
         #batch of steps to batch of rollouts
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
@@ -159,7 +170,8 @@ def learn(*, policy, env, nsteps, total_timesteps, ent_coef, lr,
     else: assert callable(cliprange)
     total_timesteps = int(total_timesteps)
 
-    nenvs = 1
+    #nenvs = env.num_envs
+    nenvs=1
     ob_space = Box(low=0, high=1, shape=(84, 84, 4))
     ac_space = Discrete(8)
     nbatch = nenvs * nsteps
@@ -171,14 +183,14 @@ def learn(*, policy, env, nsteps, total_timesteps, ent_coef, lr,
                                max_grad_norm=max_grad_norm)
 
     if load_model:
+        print('loading model')
         make_model.load(load_model_path)
-        print('File Loaded')
 
     if save_interval and logger.get_dir():
         import cloudpickle
         with open(osp.join(logger.get_dir(), 'make_model.pkl'), 'wb') as fh:
             fh.write(cloudpickle.dumps(make_model))
-    model = make_model()
+    model = make_model
     runner = Runner(env=env, model=model, nsteps=nsteps, gamma=gamma, lam=lam)
 
     epinfobuf = deque(maxlen=100)
@@ -249,7 +261,6 @@ def learn(*, policy, env, nsteps, total_timesteps, ent_coef, lr,
             #print('Saving to', savepath)
             #model.save(savepath)
     env.close()
-
 
 def safemean(xs):
     return np.nan if len(xs) == 0 else np.mean(xs)
