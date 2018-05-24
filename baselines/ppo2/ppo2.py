@@ -170,6 +170,7 @@ def learn(*, policy, env, nsteps, total_timesteps, ent_coef, lr,
 
     if load_model:
         make_model.load(load_model_path)
+        print('File Loaded')
 
     if save_interval and logger.get_dir():
         import cloudpickle
