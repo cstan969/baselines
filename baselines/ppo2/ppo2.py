@@ -14,6 +14,15 @@ class Model(object):
     def __init__(self, *, policy, ob_space, ac_space, nbatch_act, nbatch_train,
                 nsteps, ent_coef, vf_coef, max_grad_norm):
         sess = tf.get_default_session()
+        print(policy)
+        print(ob_space)
+        print(ac_space)
+        print(nbatch_act)
+        print(nbatch_train)
+        print(nsteps)
+        print(ent_coef)
+        print(vf_coef)
+        print(max_grad_norm)
 
         act_model = policy(sess, ob_space, ac_space, nbatch_act, 1, reuse=False)
         train_model = policy(sess, ob_space, ac_space, nbatch_train, nsteps, reuse=True)
@@ -58,10 +67,7 @@ class Model(object):
             if states is not None:
                 td_map[train_model.S] = states
                 td_map[train_model.M] = masks
-            return sess.run(
-                [pg_loss, vf_loss, entropy, approxkl, clipfrac, _train],
-                td_map
-            )[:-1]
+            return sess.run([pg_loss, vf_loss, entropy, approxkl, clipfrac, _train], td_map)[:-1]
         self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
 
         def save(save_path):
@@ -93,6 +99,7 @@ class Runner(object):
         self.env = env
         self.model = model
         nenv = 1
+        #self.obs = np.zeros((nenv,) + env.observation_space.shape, dtype=model.train_model.X.dtype.name)
         self.obs = np.zeros((nenv,) + ob_space.shape, dtype=model.train_model.X.dtype.name)
         self.obs[:] = env.reset()
         self.gamma = gamma
@@ -142,9 +149,13 @@ class Runner(object):
                 nextvalues = mb_values[t+1]
             delta = mb_rewards[t] + self.gamma * nextvalues * nextnonterminal - mb_values[t]
             mb_advs[t] = lastgaelam = delta + self.gamma * self.lam * nextnonterminal * lastgaelam
-        mb_returns = mb_advs + mb_values
-        return (*map(sf01, (mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs)),
-            mb_states, epinfos)
+        print('shape of mb_advs is ',mb_advs.shape)
+        print('shape of mb_values is ', mb_values.shape)
+        print('shape of mb_values is ', mb_values.shape)
+        mb_returns = mb_advs + mb_values[:,0]
+        return mb_obs, mb_rewards, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, mb_states, epinfos
+        #return (*map(sf01, (mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs)),
+        #    mb_states, epinfos)
 # obs, returns, masks, actions, values, neglogpacs, states = runner.run()
 def sf01(arr):
     """
@@ -204,36 +215,36 @@ def learn(*, policy, env, nsteps, total_timesteps, ent_coef, lr,
         frac = 1.0 - (update - 1.0) / nupdates
         lrnow = lr(frac)
         cliprangenow = cliprange(frac)
-        obs, returns, masks, actions, values, neglogpacs, states, epinfos = runner.run() #pylint: disable=E0632
-        print('epinfos = ', epinfos)
+        obs, rewards, returns, masks, actions, values, neglogpacs, states, epinfos = runner.run() #pylint: disable=E0632
+        print('size of returns is', returns.shape)
+        np.reshape(obs, (nsteps, 84, 84, 4))
+        obs.shape = (nsteps, 84, 84, 4)
+        print('obs.shape= ', obs.shape)
+        rewards.shape = (nsteps,)
+        returns.shape = (nsteps,)
+        masks.shape = (nsteps,)
+        actions.shape = (nsteps,)
+        values.shape = (nsteps,)
+        neglogpacs.shape = (nsteps,)
         epinfobuf.extend(epinfos)
         mblossvals = []
-        if states is None: # nonrecurrent version
-            inds = np.arange(nbatch)
-            #print('len(inds) = ', len(inds))
-            #print('range(noptepochs) = ', range(noptepochs))
-            for _ in range(noptepochs):
-                np.random.shuffle(inds)
-                for start in range(0, nbatch, nbatch_train):
-                    end = start + nbatch_train
-                    mbinds = inds[start:end]
-                    slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
-                    mblossvals.append(model.train(lrnow, cliprangenow, *slices))
-        else: # recurrent version
-            assert nenvs % nminibatches == 0
-            envsperbatch = nenvs // nminibatches
-            envinds = np.arange(nenvs)
-            flatinds = np.arange(nenvs * nsteps).reshape(nenvs, nsteps)
-            envsperbatch = nbatch_train // nsteps
-            for _ in range(noptepochs):
-                np.random.shuffle(envinds)
-                for start in range(0, nenvs, envsperbatch):
-                    end = start + envsperbatch
-                    mbenvinds = envinds[start:end]
-                    mbflatinds = flatinds[mbenvinds].ravel()
-                    slices = (arr[mbflatinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
-                    mbstates = states[mbenvinds]
-                    mblossvals.append(model.train(lrnow, cliprangenow, *slices, mbstates))
+        inds = np.arange(nbatch)
+        print('len(inds)=nbatch=', len(inds))
+        for _ in range(noptepochs):
+            np.random.shuffle(inds)
+            for start in range(0, nbatch, nbatch_train):
+                end = start + nbatch_train
+                mbinds = inds[start:end]
+                slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
+                # slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
+                print('obs.shape=', obs.shape)
+                print('returns.shape=', returns.shape)
+                print('masks.shape=', masks.shape)
+                print('actions.shape=', actions.shape)
+                print('values.shape=', values.shape)
+                print('neglogpacs.shape=', neglogpacs.shape)
+                mblossvals.append(model.train(lrnow, cliprangenow, *slices))
+
 
         lossvals = np.mean(mblossvals, axis=0)
         tnow = time.time()
