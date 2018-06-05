@@ -101,7 +101,7 @@ class Runner(object):
         nenv = 1
         #self.obs = np.zeros((nenv,) + env.observation_space.shape, dtype=model.train_model.X.dtype.name)
         self.obs = np.zeros((nenv,) + ob_space.shape, dtype=model.train_model.X.dtype.name)
-        self.obs[:] = self.env.reset()
+        self.obs[:] = env.reset()
         self.gamma = gamma
         self.lam = lam
         self.nsteps = nsteps
